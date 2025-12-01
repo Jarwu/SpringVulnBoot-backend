@@ -18,8 +18,8 @@ pipeline {
             }
         }
     
-    // 第二阶段：SCA 扫描 (OWASP Dependency Check)
-        stage('SCA Analysis') {
+        // 第二阶段：SCA 扫描 (OWASP Dependency Check)
+        stage('SCA: OWASP Dependency Check') {
             agent {
                 docker {
                     // 使用 ODC 官方镜像
@@ -47,6 +47,33 @@ pipeline {
                 '''
                 // allowEmptyArchive: true 是防止万一没生成报告导致流水线报错，虽然一般都会生成
                 archiveArtifacts artifacts: 'dependency-check-report.html, dependency-check-report.json', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+        // --- 第三阶段：SCA 扫描 (Trivy - 重点推荐) ---
+        stage('SCA: Trivy') {
+            agent {
+                docker {
+                    // 使用 Trivy 官方镜像
+                    image 'aquasec/trivy:latest'
+                    // 挂载缓存目录，否则每次都会下载漏洞库，很慢！
+                    // 注意：需要在宿主机创建 /home/ubuntu/trivy_cache 目录并给权限
+                    args '-v /home/ubuntu/trivy_cache:/root/.cache/'
+                }
+            }
+            steps {
+                echo '====== 3. Trivy 代码依赖扫描 ======'
+                
+                // 1. 打印表格到控制台（给看日志的人看）
+                // --security-checks vuln: 只扫漏洞，不扫配置(config)和密钥(secret)，虽然它也能扫
+                sh 'trivy fs --security-checks vuln --format table .'
+
+                // 2. 生成 JSON 报告（给后续程序处理或存档）
+                sh 'trivy fs --security-checks vuln --format json --output trivy-report.json .'
+                
+                // 3. (进阶) 如果有高危漏洞，直接断掉流水线？
+                // sh 'trivy fs --exit-code 1 --severity CRITICAL --security-checks vuln .'
+
+                archiveArtifacts artifacts: 'trivy-report.json', fingerprint: true
             }
         }
     }
