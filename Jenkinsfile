@@ -13,7 +13,8 @@ pipeline {
             steps {
                 echo '====== 开始编译 ======'
                 sh 'mvn clean package -DskipTests -Dmaven.repo.local=/tmp/m2'
-                
+                // 【修正点】: 编译完直接在当前容器上下文归档 Jar 包
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
     
@@ -44,17 +45,9 @@ pipeline {
                     --out . \
                     --data /usr/share/dependency-check/data/odc-data
                 '''
+                // allowEmptyArchive: true 是防止万一没生成报告导致流水线报错，虽然一般都会生成
+                archiveArtifacts artifacts: 'dependency-check-report.html, dependency-check-report.json', fingerprint: true, allowEmptyArchive: true
             }
-        }
-    }
-    // 构建后操作：无论成功失败，都归档产物
-    post {
-        always {
-            echo '====== 3. 归档构建产物与安全报告 ======'
-            // 归档 jar 包
-            archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            // 归档 ODC 生成的报告 (HTML 和 JSON)
-            archiveArtifacts artifacts: 'dependency-check-report.html, dependency-check-report.json', fingerprint: true
         }
     }
     
