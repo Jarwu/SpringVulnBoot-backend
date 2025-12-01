@@ -56,8 +56,9 @@ pipeline {
                     // 使用 Trivy 官方镜像
                     image 'aquasec/trivy:latest'
                     // 挂载缓存目录，否则每次都会下载漏洞库，很慢！
+                    // 【改动1】加上 --entrypoint="" 确保 Jenkins 能完全控制容器
                     // 注意：需要在宿主机创建 /home/ubuntu/trivy_cache 目录并给权限
-                    args '-v /home/ubuntu/trivy_cache:/root/.cache/'
+                    args '-v /home/ubuntu/trivy_cache:/root/.cache/ --entrypoint=""'
                 }
             }
             steps {
@@ -65,7 +66,16 @@ pipeline {
                 
                 // 1. 打印表格到控制台（给看日志的人看）
                 // --security-checks vuln: 只扫漏洞，不扫配置(config)和密钥(secret)，虽然它也能扫
-                sh 'trivy fs --security-checks vuln --format table .'
+                // 【改动2】加上 --debug 查看详细日志
+                // 【改动3】加上 --timeout 15m 防止网络慢导致超时
+                sh '''
+                    trivy fs \
+                    --debug \
+                    --timeout 15m \
+                    --security-checks vuln \
+                    --format table \
+                    .
+                '''
 
                 // 2. 生成 JSON 报告（给后续程序处理或存档）
                 sh 'trivy fs --security-checks vuln --format json --output trivy-report.json .'
