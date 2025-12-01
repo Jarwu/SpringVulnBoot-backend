@@ -58,8 +58,13 @@ pipeline {
                     // 挂载缓存目录，否则每次都会下载漏洞库，很慢！
                     // 【改动1】加上 --entrypoint="" 确保 Jenkins 能完全控制容器
                     // 注意：需要在宿主机创建 /home/ubuntu/trivy_cache 目录并给权限
-                    args '-u root -v /home/ubuntu/trivy_cache:/root/.cache/ --entrypoint=""'
+                    //【关键修改 2】 容器内的挂载点改为了 /tmp/trivy_cache (大家都可写)
+                    args '-v /home/ubuntu/trivy_cache:/tmp/trivy_cache --entrypoint=""'
                 }
+            }
+            // 【关键修改 3】 设置环境变量，告诉 Trivy 改变缓存位置
+            environment {
+                TRIVY_CACHE_DIR = "/tmp/trivy_cache"
             }
             steps {
                 echo '====== 3. Trivy 代码依赖扫描 ======'
@@ -68,6 +73,8 @@ pipeline {
                 // --security-checks vuln: 只扫漏洞，不扫配置(config)和密钥(secret)，虽然它也能扫
                 // 【改动2】加上 --debug 查看详细日志
                 // 【改动3】加上 --timeout 15m 防止网络慢导致超时
+                // 检查一下现在的身份（验证用，可选）
+                sh 'id' 
                 sh '''
                     trivy fs \
                     --debug \
