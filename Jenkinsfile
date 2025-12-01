@@ -46,15 +46,16 @@ pipeline {
                 '''
             }
         }
-        // 构建后操作：无论成功失败，都归档产物
-        post {
-            always {
-                echo '====== 3. 归档构建产物与安全报告 ======'
-                // 归档 jar 包
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-                // 归档 ODC 生成的报告 (HTML 和 JSON)
-                archiveArtifacts artifacts: 'dependency-check-report.html, dependency-check-report.json', fingerprint: true
-            }
+    }
+    // 构建后操作：无论成功失败，都归档产物
+    post {
+        always {
+            echo '====== 3. 归档构建产物与安全报告 ======'
+            // 归档 jar 包
+            archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            // 归档 ODC 生成的报告 (HTML 和 JSON)
+            archiveArtifacts artifacts: 'dependency-check-report.html, dependency-check-report.json', fingerprint: true
         }
     }
+    
 }
