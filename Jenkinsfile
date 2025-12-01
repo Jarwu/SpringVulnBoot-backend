@@ -58,7 +58,7 @@ pipeline {
                     // 挂载缓存目录，否则每次都会下载漏洞库，很慢！
                     // 【改动1】加上 --entrypoint="" 确保 Jenkins 能完全控制容器
                     // 注意：需要在宿主机创建 /home/ubuntu/trivy_cache 目录并给权限
-                    args '-v /home/ubuntu/trivy_cache:/root/.cache/ --entrypoint=""'
+                    args '-u root -v /home/ubuntu/trivy_cache:/root/.cache/ --entrypoint=""'
                 }
             }
             steps {
