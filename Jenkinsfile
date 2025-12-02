@@ -2,23 +2,67 @@ pipeline {
     agent none 
 
     stages {
-        // 第一阶段：编译 (Java 构建)
-        stage('Build & Test') {
+        // 阶段一：编译 + SAST 扫描 (合并在一起效率最高)
+        stage('Build & SAST (SonarQube)') {
             agent {
                 docker {
+                    // 依然使用 Maven 镜像
                     image 'maven:3.8.6-openjdk-11'
-                    args '-v /home/ubuntu/maven_repo:/tmp/m2'
+                    // 挂载 m2 缓存，加速构建
+                    // 【关键】需要把当前容器加入到 devops-net 网络，否则连不上 SonarQube
+                    args '-v /home/ubuntu/maven_repo:/tmp/m2 --network devops-net'
                 }
             }
             steps {
-                echo '====== 开始编译 ======'
-                sh 'mvn clean package -DskipTests -Dmaven.repo.local=/tmp/m2'
-                // 【修正点】: 编译完直接在当前容器上下文归档 Jar 包
+                echo '====== 1. 编译并进行 SonarQube 代码分析 ======'
+                
+                // withSonarQubeEnv 里的名字必须和 Jenkins 系统配置里的 Name 一致
+                withSonarQubeEnv('sonar-server') {
+                    // mvn sonar:sonar 会自动读取环境变量里的配置连接服务端
+                    // -Dsonar.projectKey 必须和 SonarQube 里创建的一致
+                    sh '''
+                        mvn clean package sonar:sonar \
+                        -Dmaven.repo.local=/tmp/m2 \
+                        -DskipTests \
+                        -Dsonar.projectKey=SpringVulnBoot
+                    '''
+                }
+                
+                // 归档构建产物
                 archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
+
+        // 阶段二：质量门禁 (Quality Gate) - 这才是 DevSecOps 的核心
+        // 注意：这个步骤不需要在 Docker 代理里跑，Jenkins 主节点跑就行
+        stage("Quality Gate") {
+            agent any
+            steps {
+                echo '====== 2. 检查 SonarQube 质量门禁结果 ======'
+                timeout(time: 5, unit: 'MINUTES') {
+                    // waitForQualityGate 会挂起流水线，等待 SonarQube 分析完成并返回结果
+                    // 如果结果是 ERROR (比如漏洞太多)，流水线会在这里失败
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        // 编译 (Java 构建)
+        //stage('Build & Test') {
+        //    agent {
+        //         docker {
+        //             image 'maven:3.8.6-openjdk-11'
+        //             args '-v /home/ubuntu/maven_repo:/tmp/m2'
+        //         }
+        //     }
+        //     steps {
+        //         echo '====== 开始编译 ======'
+        //         sh 'mvn clean package -DskipTests -Dmaven.repo.local=/tmp/m2'
+        //         // 【修正点】: 编译完直接在当前容器上下文归档 Jar 包
+        //         archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+        //     }
+        // }
     
-        // 第二阶段：SCA 扫描 (OWASP Dependency Check)
+        // SCA 扫描 (OWASP Dependency Check)
         stage('SCA: OWASP Dependency Check') {
             agent {
                 docker {
@@ -49,7 +93,7 @@ pipeline {
                 archiveArtifacts artifacts: 'dependency-check-report.html, dependency-check-report.json', fingerprint: true, allowEmptyArchive: true
             }
         }
-        // --- 第三阶段：SCA 扫描 (Trivy - 重点推荐) ---
+        //SCA 扫描 (Trivy - 重点推荐) ---
         stage('SCA: Trivy') {
             agent {
                 docker {
